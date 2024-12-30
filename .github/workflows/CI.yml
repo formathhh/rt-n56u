@@ -30,7 +30,7 @@ jobs:
           - build_variant: "mt7628"
             targets: " HC5661A"
           
-          - build_variant: "mt7628-usb"
+          
           
     steps:
       - uses: actions/checkout@v2
