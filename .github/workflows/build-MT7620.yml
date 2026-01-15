@@ -1,38 +1,89 @@
 name: Build MT7620
 
 on: 
+  workflow_dispatch:  # 添加：支持手动运行
+  push:               # 添加：推送时触发
+    branches: [ main, master ]
+    paths:
+      - '.github/workflows/build-MT7620.yml'
+      - 'trunk/**'
   release:
     types: [published]
-#  push:
-#    tags:
-#    - 'v*'
-  #  branches: 
-  #    - master
- # schedule:
- #   - cron: 0 17 * * 4
-#  watch:
-#    types: [started]
+  schedule:           # 取消注释并修复cron语法
+    - cron: '0 17 * * 4'  # 每周四17:00
 
 jobs:
   build:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04  # 修复：更新Ubuntu版本
 
     steps:
     - name: Checkout
-      uses: actions/checkout@master
+      uses: actions/checkout@v3  # 更新：使用v3版本
+      with:
+        submodules: recursive
+        
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo apt-get update
-        sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
-        cpio git python-docutils gettext automake autopoint texinfo build-essential help2man \
-        pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget
+        sudo apt-get -y install \
+          unzip \
+          libtool-bin \
+          curl \
+          cmake \
+          gperf \
+          gawk \
+          flex \
+          bison \
+          nano \
+          xxd \
+          fakeroot \
+          cpio \
+          git \
+          python3 \
+          python3-docutils \
+          gettext \
+          automake \
+          autopoint \
+          texinfo \
+          build-essential \
+          help2man \
+          pkg-config \
+          zlib1g-dev \
+          libgmp-dev \          # 更新：libgmp3-dev -> libgmp-dev
+          libmpc-dev \
+          libmpfr-dev \
+          libncurses5-dev \
+          libltdl-dev \
+          wget \
+          rsync \
+          device-tree-compiler  # 添加：必要的host工具
+        
+    - name: Install Go for Padavan
+      run: |
+        # 安装Go 1.20（Padavan兼容版本）
+        wget -q https://go.dev/dl/go1.20.12.linux-amd64.tar.gz
+        sudo tar -C /usr/local -xzf go1.20.12.linux-amd64.tar.gz
+        rm go1.20.12.linux-amd64.tar.gz
+        echo "GOROOT=/usr/local/go" >> $GITHUB_ENV
+        echo "GOPATH=/home/runner/go" >> $GITHUB_ENV
+        echo "PATH=/usr/local/go/bin:$PATH" >> $GITHUB_ENV
+        
     - name: Clone source code
       run: |
         cd toolchain-mipsel
-        sh dl_toolchain.sh
+        chmod +x dl_toolchain.sh
+        ./dl_toolchain.sh
         mkdir -p /opt/images/
+        
+    - name: Verify environment
+      run: |
+        echo "环境检查:"
+        go version
+        python3 --version
+        gcc --version | head -1
+        
     - name: Build Firmware
       env:
         TNAME: "NEWIFI-MINI MI-MINI MI-3 OYE-001 YK-L1 JCG-AC836M 5K-W20"
@@ -63,7 +114,7 @@ jobs:
         ######################################################################
         echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config #MENTOHUST
         echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config #SCUTCLIENT
-        echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config #SS plus+
+        echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config #SS plus+  # 保持你的选择
         echo "CONFIG_FIRMWARE_INCLUDE_SSSERVER=n" >> .config #SS server
         echo "CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER=n" >> .config #DNSFORWARDER
         echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=n" >> .config #adbyby plus+
@@ -73,8 +124,8 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=n" >> .config #阿里DDNS
         echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config #smartdns
         echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y" >> .config #smartdns二进制文件
-        echo "CONFIG_FIRMWARE_INCLUDE_V2RAY=y" >> .config #v2ray二进制文件
-        echo "CONFIG_FIRMWARE_INCLUDE_TROJAN=y" >> .config #集成trojan执行文件，如果不集成，会从网上下载下来执行，不影响正常使用
+        echo "CONFIG_FIRMWARE_INCLUDE_V2RAY=y" >> .config #v2ray二进制文件  # 保持你的选择
+        echo "CONFIG_FIRMWARE_INCLUDE_TROJAN=y" >> .config #集成trojan执行文件  # 保持你的选择
         echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=n" >> .config #KP广告过滤
         echo "CONFIG_FIRMWARE_INCLUDE_CADDY=y" >> .config #在线文件管理服务
         echo "CONFIG_FIRMWARE_INCLUDE_CADDYBIN=n" >> .config #集成caddu执行文件，此文件有13M,请注意固件大小。如果不集成，会从网上下载下来执行，不影响正常使用
@@ -100,11 +151,32 @@ jobs:
         sudo ./build_firmware_modify $m 0
         sudo mv -f images/*.trx /opt/images/
         done
+        
+    - name: Check firmware size
+      run: |
+        echo "固件大小检查:"
+        ls -lh /opt/images/*.trx
+        for f in /opt/images/*.trx; do
+          size=$(stat -c%s "$f")
+          size_mb=$((size / 1048576))
+          echo "$(basename $f): ${size_mb}MB"
+          if [ $size_mb -gt 8 ]; then
+            echo "警告: $(basename $f) 超过8MB，优酷L1可能无法刷入"
+          fi
+        done
+        
     - name: Upload binaries to release
-      uses: svenstaro/upload-release-action@v1-release
+      uses: svenstaro/upload-release-action@v2-release
       with:
-        repo_token: ${{ secrets.R_TOKEN }}
+        repo_token: ${{ secrets.GITHUB_TOKEN }}  # 使用默认token
         file: /opt/images/*.trx
-        tag: AtuoBuild
+        tag: AutoBuild-${{ github.run_number }}
         overwrite: true
         file_glob: true
+        
+    - name: Upload artifacts (备份)
+      uses: actions/upload-artifact@v3
+      with:
+        name: firmware-all-mt7620
+        path: /opt/images/
+        retention-days: 7
