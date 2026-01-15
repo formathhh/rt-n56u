@@ -8,16 +8,35 @@ all: download_test extract_test config_test
 download_test:
 	( if [ ! -f $(SRC_NAME).tar.gz ]; then \
 		echo "下载 htop 源码..."; \
-		wget -t5 --timeout=30 --no-check-certificate --content-disposition $(SRC_URL) -O $(SRC_NAME).tar.gz || \
-		wget -t5 --timeout=30 --no-check-certificate $(SRC_URL) -O $(SRC_NAME).tar.gz; \
+		wget -t5 --timeout=30 --no-check-certificate -O $(SRC_NAME).tar.gz $(SRC_URL) || \
+		wget -t5 --timeout=30 --no-check-certificate --content-disposition $(SRC_URL); \
 	fi )
 
 extract_test:
 	( if [ ! -d $(SRC_NAME) ]; then \
 		echo "解压 htop 源码..."; \
-		mkdir -p $(SRC_NAME); \
-		tar zxf $(SRC_NAME).tar.gz --strip-components=1 -C $(SRC_NAME) 2>/dev/null || \
-		( tar zxf $(SRC_NAME).tar.gz && mv htop-3.0.2/* $(SRC_NAME)/ && rm -rf htop-3.0.2 ); \
+		rm -rf $(SRC_NAME) tmp_htop_extract 2>/dev/null; \
+		# 先解压看看目录结构
+		tar zxf $(SRC_NAME).tar.gz 2>/dev/null; \
+		# 检查可能的目录名
+		if [ -d "htop-3.0.2" ]; then \
+			mv htop-3.0.2 $(SRC_NAME); \
+		elif [ -d "htop-htop-3.0.2" ]; then \
+			mv htop-htop-3.0.2 $(SRC_NAME); \
+		elif [ -d "htop-htop-3.0.2" ]; then \
+			mv htop-htop-3.0.2 $(SRC_NAME); \
+		else \
+			# 如果都不匹配，用strip方式
+			mkdir -p $(SRC_NAME); \
+			tar zxf $(SRC_NAME).tar.gz --strip-components=1 -C $(SRC_NAME); \
+		fi; \
+		# 最终检查
+		if [ ! -f $(SRC_NAME)/configure ]; then \
+			echo "错误: 解压后找不到 configure 文件"; \
+			ls -la; \
+			ls -la $(SRC_NAME)/ 2>/dev/null || echo "目录不存在"; \
+			exit 1; \
+		fi; \
 	fi )
 
 config_test:
