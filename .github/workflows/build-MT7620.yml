@@ -1,24 +1,25 @@
 name: Build MT7620
 
 on: 
-  workflow_dispatch:  # 添加：支持手动运行
-  push:               # 添加：推送时触发
+  workflow_dispatch:  # 支持手动运行
+  push:               # 推送时触发
     branches: [ main, master ]
     paths:
       - '.github/workflows/build-MT7620.yml'
       - 'trunk/**'
   release:
     types: [published]
-  schedule:           # 取消注释并修复cron语法
+  schedule:
     - cron: '0 17 * * 4'  # 每周四17:00
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # 修复：更新Ubuntu版本
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120  # 添加超时
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3  # 更新：使用v3版本
+      uses: actions/checkout@v4  # 使用v4
       with:
         submodules: recursive
         
@@ -51,18 +52,17 @@ jobs:
           help2man \
           pkg-config \
           zlib1g-dev \
-          libgmp-dev \          # 更新：libgmp3-dev -> libgmp-dev
+          libgmp-dev \
           libmpc-dev \
           libmpfr-dev \
           libncurses5-dev \
           libltdl-dev \
           wget \
           rsync \
-          device-tree-compiler  # 添加：必要的host工具
+          device-tree-compiler
         
     - name: Install Go for Padavan
       run: |
-        # 安装Go 1.20（Padavan兼容版本）
         wget -q https://go.dev/dl/go1.20.12.linux-amd64.tar.gz
         sudo tar -C /usr/local -xzf go1.20.12.linux-amd64.tar.gz
         rm go1.20.12.linux-amd64.tar.gz
@@ -114,7 +114,7 @@ jobs:
         ######################################################################
         echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config #MENTOHUST
         echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config #SCUTCLIENT
-        echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config #SS plus+  # 保持你的选择
+        echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config #SS plus+
         echo "CONFIG_FIRMWARE_INCLUDE_SSSERVER=n" >> .config #SS server
         echo "CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER=n" >> .config #DNSFORWARDER
         echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=n" >> .config #adbyby plus+
@@ -124,28 +124,21 @@ jobs:
         echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=n" >> .config #阿里DDNS
         echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config #smartdns
         echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y" >> .config #smartdns二进制文件
-        echo "CONFIG_FIRMWARE_INCLUDE_V2RAY=y" >> .config #v2ray二进制文件  # 保持你的选择
-        echo "CONFIG_FIRMWARE_INCLUDE_TROJAN=y" >> .config #集成trojan执行文件  # 保持你的选择
+        echo "CONFIG_FIRMWARE_INCLUDE_V2RAY=y" >> .config #v2ray二进制文件
+        echo "CONFIG_FIRMWARE_INCLUDE_TROJAN=y" >> .config #集成trojan执行文件
         echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=n" >> .config #KP广告过滤
         echo "CONFIG_FIRMWARE_INCLUDE_CADDY=y" >> .config #在线文件管理服务
-        echo "CONFIG_FIRMWARE_INCLUDE_CADDYBIN=n" >> .config #集成caddu执行文件，此文件有13M,请注意固件大小。如果不集成，会从网上下载下来执行，不影响正常使用
+        echo "CONFIG_FIRMWARE_INCLUDE_CADDYBIN=n" >> .config #集成caddy执行文件，此文件有13M
         echo "CONFIG_FIRMWARE_INCLUDE_KUMASOCKS=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=n" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_IPT2SOCKS=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_MICROSOCKS=y" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_SRELAY=n" >> .config
         echo "CONFIG_FIRMWARE_INCLUDE_WYY=n" >> .config #网易云解锁
-        echo "CONFIG_FIRMWARE_INCLUDE_WYYBIN=n" >> .config #网易云解锁GO版本执行文件（4M多）注意固件超大小
+        echo "CONFIG_FIRMWARE_INCLUDE_WYYBIN=n" >> .config #网易云解锁GO版本执行文件
         echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=y" >> .config #zerotier ~1.3M
         ####################################################################################
-        #if [ "$m" = "PSG1208" ] || [ "$m" = "PSG1218" ] || [ "$m" = "PSG712" ]; then
-        #sed -i '/CONFIG_FIRMWARE_INCLUDE_TTYD/d' .config
-        #sed -i '/CONFIG_FIRMWARE_INCLUDE_ALIDDNS/d' .config
         echo "CONFIG_FIRMWARE_INCLUDE_TTYD=n" >> .config
-        #echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=n" >> .config
-        #echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n" >> .config
-        #echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=n" >> .config
-        #fi
         sed -i "s/^CONFIG_TOOLCHAIN_DIR=.*$/CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}/g" .config
         sudo ./clear_tree_simple
         sudo ./build_firmware_modify $m 0
@@ -165,17 +158,40 @@ jobs:
           fi
         done
         
-    - name: Upload binaries to release
-      uses: svenstaro/upload-release-action@v2-release
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1  # ✅ 正确的release action
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}  # 使用默认token
-        file: /opt/images/*.trx
-        tag: AutoBuild-${{ github.run_number }}
-        overwrite: true
-        file_glob: true
+        tag_name: autobuild-${{ github.run_number }}
+        name: "Padavan MT7620 Build #${{ github.run_number }}"
+        body: |
+          ## Padavan固件自动编译
+          
+          **编译信息:**
+          - 工作流运行: #${{ github.run_number }}
+          - 编译时间: ${{ github.event.head_commit.timestamp }}
+          - 提交哈希: ${{ github.sha }}
+          
+          **包含设备:**
+          - NEWIFI-MINI
+          - MI-MINI
+          - MI-3
+          - OYE-001
+          - YK-L1 (优酷路由宝)
+          - JCG-AC836M
+          - 5K-W20
+          
+          **注意事项:**
+          1. 选择对应设备的固件刷入
+          2. 首次启动建议恢复出厂设置
+          3. 检查固件大小，确保设备Flash足够
+        files: /opt/images/*.trx
+        draft: false
+        prerelease: true
         
-    - name: Upload artifacts (备份)
-      uses: actions/upload-artifact@v3
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4  # ✅ 使用v4
       with:
         name: firmware-all-mt7620
         path: /opt/images/
