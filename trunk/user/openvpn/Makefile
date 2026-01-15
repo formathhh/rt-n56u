@@ -30,6 +30,7 @@ configure:
 		--disable-iproute2 \
 		--disable-management \
 		--disable-socks \
+		--disable-lz4 \                # ← 修复：禁用 LZ4 支持
 		--enable-small \
 		--enable-multi \
 		--enable-server \
