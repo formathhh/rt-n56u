@@ -90,7 +90,7 @@ jobs:
         #if [ "$m" = "PSG1208" ] || [ "$m" = "PSG1218" ] || [ "$m" = "PSG712" ]; then
         #sed -i '/CONFIG_FIRMWARE_INCLUDE_TTYD/d' .config
         #sed -i '/CONFIG_FIRMWARE_INCLUDE_ALIDDNS/d' .config
-        #echo "CONFIG_FIRMWARE_INCLUDE_TTYD=n" >> .config
+        echo "CONFIG_FIRMWARE_INCLUDE_TTYD=n" >> .config
         #echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=n" >> .config
         #echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n" >> .config
         #echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=n" >> .config
